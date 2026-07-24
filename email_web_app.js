@@ -42,6 +42,10 @@ try {
 
 function saveEmailDetailsCache() {
   try {
+    const dir = path.dirname(emailCachePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     fs.writeFileSync(emailCachePath, JSON.stringify(emailDetailsCache, null, 2), 'utf8');
   } catch (err) {
     console.warn('[WARNING] Failed to save email details cache:', err.message);
@@ -551,8 +555,17 @@ const server = http.createServer(async (req, res) => {
           
           // Save to .env
           let content = '';
+          const dir = path.dirname(dotenvPath);
+          if (!fs.existsSync(dir)) {
+            try {
+              fs.mkdirSync(dir, { recursive: true });
+            } catch(e) {}
+          }
+
           if (fs.existsSync(dotenvPath)) {
-            content = fs.readFileSync(dotenvPath, 'utf8');
+            try {
+              content = fs.readFileSync(dotenvPath, 'utf8');
+            } catch(e) {}
           }
           let lines = content.split(/\r?\n/);
           let updated = false;
@@ -566,7 +579,17 @@ const server = http.createServer(async (req, res) => {
           if (!updated) {
             lines.push(`MATON_API_KEY=${newKey}`);
           }
-          fs.writeFileSync(dotenvPath, lines.join('\n'), 'utf8');
+          
+          try {
+            fs.writeFileSync(dotenvPath, lines.join('\n'), 'utf8');
+          } catch (writeErr) {
+            console.warn('[WARNING] Failed to write API key to C:\\OpenClaw\\.env:', writeErr.message);
+            try {
+              fs.writeFileSync(path.join(__dirname, '.env'), lines.join('\n'), 'utf8');
+            } catch (localErr) {
+              console.warn('[WARNING] Failed to write API key to local .env fallback:', localErr.message);
+            }
+          }
           
           // Update in-memory
           apiKey = newKey;
@@ -630,6 +653,39 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
       }
+    } else {
+      res.writeHead(405, { 'Content-Type': 'text/plain' });
+      res.end('Method Not Allowed');
+    }
+  } else if (url.pathname === '/api/maton/searchconsole/performance') {
+    if (req.method === 'POST') {
+      let bodyData = '';
+      req.on('data', chunk => bodyData += chunk);
+      req.on('end', async () => {
+        try {
+          const bodyObj = bodyData ? JSON.parse(bodyData) : {};
+          const { siteUrl, startDate, endDate, dimensions, rowLimit } = bodyObj;
+          if (!siteUrl) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'siteUrl is required' }));
+            return;
+          }
+          const payload = {
+            startDate: startDate,
+            endDate: endDate,
+            dimensions: dimensions || ['query'],
+            rowLimit: rowLimit || 100
+          };
+          console.log(`API Request: Fetching Search Console performance for ${siteUrl}...`);
+          const targetUrl = `/google-search-console/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+          const result = await makeMatonRequest(targetUrl, 'POST', payload);
+          res.writeHead(result.status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result.body));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
     } else {
       res.writeHead(405, { 'Content-Type': 'text/plain' });
       res.end('Method Not Allowed');

@@ -10,6 +10,16 @@
   --hover-color: rgba(99, 102, 241, 0.08);
   --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   --glass: rgba(26, 27, 35, 0.65);
+  
+  /* Search Console Specific */
+  --sc-clicks: #4285f4;
+  --sc-impressions: #a546df;
+  --sc-ctr: #0f9d58;
+  --sc-position: #e37400;
+  --sc-clicks-bg: rgba(66, 133, 244, 0.08);
+  --sc-impressions-bg: rgba(165, 70, 223, 0.08);
+  --sc-ctr-bg: rgba(15, 157, 88, 0.08);
+  --sc-position-bg: rgba(227, 116, 0, 0.08);
 }
 
 * {
@@ -1093,6 +1103,204 @@ body {
 .switch input:checked + .slider:before {
   transform: translateX(18px);
   background-color: white;
+}
+
+/* Search Console Replica Styles */
+.sc-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  width: 100%;
+}
+
+.sc-kpi-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px 20px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.sc-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--text-secondary);
+}
+
+.sc-kpi-card.active {
+  border-width: 1px;
+}
+
+#kpi-clicks.active {
+  border-color: var(--sc-clicks);
+  background-color: var(--sc-clicks-bg);
+}
+
+#kpi-impressions.active {
+  border-color: var(--sc-impressions);
+  background-color: var(--sc-impressions-bg);
+}
+
+#kpi-ctr.active {
+  border-color: var(--sc-ctr);
+  background-color: var(--sc-ctr-bg);
+}
+
+#kpi-position.active {
+  border-color: var(--sc-position);
+  background-color: var(--sc-position-bg);
+}
+
+.sc-kpi-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sc-kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sc-kpi-dot {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sc-kpi-card.active .sc-kpi-dot {
+  opacity: 1;
+}
+
+.sc-chart-container {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  height: 350px;
+  position: relative;
+}
+
+.sc-tabs-container {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.sc-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.sc-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.sc-tab:hover {
+  color: var(--text-primary);
+  background-color: var(--hover-color);
+}
+
+.sc-tab.active {
+  color: var(--accent-color);
+  border-bottom-color: var(--accent-color);
+}
+
+.sc-table-wrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.sc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sc-table th, .sc-table td {
+  padding: 12px 16px;
+  text-align: left;
+}
+
+.sc-table th {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.sc-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s ease;
+}
+
+.sc-table tbody tr:hover {
+  background-color: var(--hover-color);
+}
+
+.sc-table td {
+  font-size: 14px;
+  color: var(--text-primary);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-table td.numeric {
+  font-family: monospace;
+  font-size: 13px;
+  text-align: right;
+}
+
+.sc-table th.numeric {
+  text-align: right;
+}
+
+.sc-progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.sc-progress-bar {
+  height: 100%;
+  background-color: var(--accent-color);
+  border-radius: 3px;
 }
 
 

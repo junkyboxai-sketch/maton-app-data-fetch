@@ -568,6 +568,34 @@ module.exports = async (req, res) => {
     } else {
       res.status(405).end('Method Not Allowed');
     }
+  } else if (pathname === '/api/maton/searchconsole/performance') {
+    if (req.method === 'POST') {
+      let bodyData = '';
+      req.on('data', chunk => bodyData += chunk);
+      req.on('end', async () => {
+        try {
+          const bodyObj = bodyData ? JSON.parse(bodyData) : {};
+          const { siteUrl, startDate, endDate, dimensions, rowLimit } = bodyObj;
+          if (!siteUrl) {
+            res.status(400).json({ error: 'siteUrl is required' });
+            return;
+          }
+          const payload = {
+            startDate: startDate,
+            endDate: endDate,
+            dimensions: dimensions || ['query'],
+            rowLimit: rowLimit || 100
+          };
+          const targetUrl = `/google-search-console/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+          const result = await makeMatonRequest(apiKey, targetUrl, 'POST', payload);
+          res.status(result.status).json(result.body);
+        } catch (err) {
+          res.status(500).json({ error: err.message });
+        }
+      });
+    } else {
+      res.status(405).end('Method Not Allowed');
+    }
   } else if (pathname === '/api/maton/analytics/accounts') {
     if (req.method === 'GET') {
       try {

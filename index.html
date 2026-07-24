@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Maton Gmail Portal</title>
+  <title>Maton Workspace Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="app-container">
@@ -21,6 +22,7 @@
         <button class="ws-tab active" id="tab-mail" data-ws="mail">✉ Mail</button>
         <button class="ws-tab" id="tab-drive" data-ws="drive">📁 Drive</button>
         <button class="ws-tab" id="tab-connections" data-ws="connections">🔌 Connections</button>
+        <button class="ws-tab" id="tab-searchconsole" data-ws="searchconsole">🔍 Search Console</button>
       </div>
       <div class="search-area">
         <input type="text" id="search-input" placeholder="Search emails by subject, sender, or snippet...">
@@ -92,6 +94,17 @@
           </a>
           <a href="#" class="nav-item" data-filter="analytics">
             <span class="icon">📊</span> Analytics
+          </a>
+        </nav>
+        <nav class="sidebar-nav" id="sidebar-nav-searchconsole" style="display: none;">
+          <a href="#" class="nav-item active" data-filter="sc-performance">
+            <span class="icon">📈</span> Performance
+          </a>
+          <a href="#" class="nav-item" data-filter="sc-pages">
+            <span class="icon">📄</span> Pages
+          </a>
+          <a href="#" class="nav-item" data-filter="sc-countries">
+            <span class="icon">🌍</span> Countries & Devices
           </a>
         </nav>
       </aside>
@@ -226,6 +239,93 @@
           
           <div class="connections-content" id="connections-content" style="flex: 1; overflow-y: auto; padding: 25px 30px;">
             <!-- Grid of connections or list of sites/properties will be populated here -->
+          </div>
+        </section>
+
+        <!-- Search Console Replica Panel -->
+        <section class="connections-list-panel" id="searchconsole-panel" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
+          <div class="panel-header">
+            <h2 id="searchconsole-panel-title">Search Console Performance</h2>
+            <div class="header-actions">
+              <select id="sc-site-select" class="month-select" style="max-width: 300px;">
+                <option value="">Select Property...</option>
+              </select>
+              <select id="sc-date-select" class="month-select">
+                <option value="7d">Last 7 Days</option>
+                <option value="28d" selected>Last 28 Days</option>
+                <option value="3m">Last 3 Months</option>
+                <option value="6m">Last 6 Months</option>
+                <option value="12m">Last 12 Months</option>
+              </select>
+              <button class="refresh-btn" id="sc-refresh-btn">🔄 Refresh</button>
+            </div>
+          </div>
+
+          <div class="searchconsole-content" id="searchconsole-content" style="flex: 1; overflow-y: auto; padding: 25px 30px;">
+            <div class="loading-state" id="sc-loading-state" style="display: none;">
+              <div class="spinner"></div>
+              <p>Fetching performance data from Google Search Console...</p>
+            </div>
+
+            <div class="empty-state" id="sc-empty-state" style="display: flex;">
+              <p id="sc-empty-message">Please select a property or set configured Maton API key to view performance metrics.</p>
+            </div>
+
+            <div id="sc-dashboard-view" style="display: none; flex-direction: column; gap: 25px;">
+              <div class="sc-kpi-grid">
+                <div class="sc-kpi-card active" id="kpi-clicks" data-metric="clicks">
+                  <div class="sc-kpi-title">Total clicks</div>
+                  <div class="sc-kpi-value" id="kpi-clicks-val">0</div>
+                  <span class="sc-kpi-dot" style="background-color: var(--sc-clicks);"></span>
+                </div>
+                <div class="sc-kpi-card active" id="kpi-impressions" data-metric="impressions">
+                  <div class="sc-kpi-title">Total impressions</div>
+                  <div class="sc-kpi-value" id="kpi-impressions-val">0</div>
+                  <span class="sc-kpi-dot" style="background-color: var(--sc-impressions);"></span>
+                </div>
+                <div class="sc-kpi-card active" id="kpi-ctr" data-metric="ctr">
+                  <div class="sc-kpi-title">Average CTR</div>
+                  <div class="sc-kpi-value" id="kpi-ctr-val">0%</div>
+                  <span class="sc-kpi-dot" style="background-color: var(--sc-ctr);"></span>
+                </div>
+                <div class="sc-kpi-card active" id="kpi-position" data-metric="position">
+                  <div class="sc-kpi-title">Average position</div>
+                  <div class="sc-kpi-value" id="kpi-position-val">0</div>
+                  <span class="sc-kpi-dot" style="background-color: var(--sc-position);"></span>
+                </div>
+              </div>
+
+              <div class="sc-chart-container">
+                <canvas id="sc-chart"></canvas>
+              </div>
+
+              <div class="sc-tabs-container">
+                <div class="sc-tabs">
+                  <button class="sc-tab active" data-tab="queries">Queries</button>
+                  <button class="sc-tab" data-tab="pages">Pages</button>
+                  <button class="sc-tab" data-tab="countries">Countries</button>
+                  <button class="sc-tab" data-tab="devices">Devices</button>
+                  <button class="sc-tab" data-tab="dates">Dates</button>
+                </div>
+                
+                <div style="margin: 15px 0; display: flex; gap: 10px;">
+                  <input type="text" id="sc-table-search" class="search-input" placeholder="Filter rows..." style="flex: 1; max-width: 300px; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--bg-secondary); color: var(--text-primary); font-family: inherit; font-size: 13px;">
+                </div>
+
+                <div class="sc-table-wrapper drive-files-table-container">
+                  <table class="drive-table sc-table">
+                    <thead>
+                      <tr id="sc-table-headers">
+                        <!-- Populated dynamically -->
+                      </tr>
+                    </thead>
+                    <tbody id="sc-table-body">
+                      <!-- Populated dynamically -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>

@@ -13,6 +13,22 @@ let matonConnections = [];
 let isRealtimeSyncEnabled = true;
 let realtimeSyncInterval = null;
 
+// Search Console Replica variables
+let activeScFilter = 'sc-performance'; // 'sc-performance', 'sc-pages', 'sc-countries'
+let scSites = [];
+let scCurrentSite = '';
+let scChartInstance = null;
+let scActiveMetrics = new Set(['clicks', 'impressions', 'ctr', 'position']);
+let scPerformanceData = {
+  date: [],
+  queries: [],
+  pages: [],
+  countries: [],
+  devices: []
+};
+let scActiveTab = 'queries';
+let scIsInitialized = false;
+
 function makeHeaders(customHeaders = {}) {
   const headers = { ...customHeaders };
   const key = localStorage.getItem('matonApiKey');
@@ -31,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tab-mail').addEventListener('click', () => switchWorkspace('mail'));
   document.getElementById('tab-drive').addEventListener('click', () => switchWorkspace('drive'));
   document.getElementById('tab-connections').addEventListener('click', () => switchWorkspace('connections'));
+  document.getElementById('tab-searchconsole').addEventListener('click', () => switchWorkspace('searchconsole'));
 
   // Refresh and action buttons
   document.getElementById('refresh-btn').addEventListener('click', () => {
@@ -178,6 +195,31 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Sidebar navigation for Search Console
+  document.querySelectorAll('#sidebar-nav-searchconsole .nav-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelectorAll('#sidebar-nav-searchconsole .nav-item').forEach(nav => nav.classList.remove('active'));
+      item.classList.add('active');
+      activeScFilter = item.getAttribute('data-filter');
+      
+      const titles = {
+        'sc-performance': 'Search Console Performance',
+        'sc-pages': 'Search Console Pages',
+        'sc-countries': 'Search Console Countries & Devices'
+      };
+      document.getElementById('searchconsole-panel-title').textContent = titles[activeScFilter] || 'Search Console';
+      
+      if (activeScFilter === 'sc-performance') {
+        switchScTableTab('queries');
+      } else if (activeScFilter === 'sc-pages') {
+        switchScTableTab('pages');
+      } else if (activeScFilter === 'sc-countries') {
+        switchScTableTab('countries');
+      }
+    });
+  });
+
   initRealtimeSync();
   initSettingsModal();
 });
@@ -189,10 +231,12 @@ function switchWorkspace(workspace) {
   const mailTab = document.getElementById('tab-mail');
   const driveTab = document.getElementById('tab-drive');
   const connectionsTab = document.getElementById('tab-connections');
+  const searchConsoleTab = document.getElementById('tab-searchconsole');
   
   const mailNav = document.getElementById('sidebar-nav-mail');
   const driveNav = document.getElementById('sidebar-nav-drive');
   const connectionsNav = document.getElementById('sidebar-nav-connections');
+  const searchConsoleNav = document.getElementById('sidebar-nav-searchconsole');
   
   const actionBtn = document.getElementById('sidebar-action-btn');
   const searchInput = document.getElementById('search-input');
@@ -202,6 +246,7 @@ function switchWorkspace(workspace) {
   const drivePanel = document.getElementById('drive-list-panel');
   const driveDetailPanel = document.getElementById('drive-detail-panel');
   const connectionsPanel = document.getElementById('connections-list-panel');
+  const searchConsolePanel = document.getElementById('searchconsole-panel');
   
   const logoIcon = document.getElementById('app-logo-icon');
   const logoTitle = document.getElementById('app-logo-title');
@@ -212,11 +257,13 @@ function switchWorkspace(workspace) {
   mailTab.classList.remove('active');
   driveTab.classList.remove('active');
   connectionsTab.classList.remove('active');
+  searchConsoleTab.classList.remove('active');
 
   // Hide all sidebars
   mailNav.style.display = 'none';
   driveNav.style.display = 'none';
   connectionsNav.style.display = 'none';
+  searchConsoleNav.style.display = 'none';
 
   // Hide all panels
   mailPanel.style.display = 'none';
@@ -224,6 +271,7 @@ function switchWorkspace(workspace) {
   drivePanel.style.display = 'none';
   driveDetailPanel.style.display = 'none';
   connectionsPanel.style.display = 'none';
+  searchConsolePanel.style.display = 'none';
 
   if (workspace === 'mail') {
     mailTab.classList.add('active');
@@ -253,6 +301,15 @@ function switchWorkspace(workspace) {
     searchInput.placeholder = 'Search integrations, sites, properties...';
     connectionsPanel.style.display = 'flex';
     fetchConnections();
+  } else if (workspace === 'searchconsole') {
+    searchConsoleTab.classList.add('active');
+    searchConsoleNav.style.display = 'flex';
+    actionBtn.style.display = 'none';
+    logoIcon.textContent = '🔍';
+    logoTitle.textContent = 'MatonConsole';
+    searchInput.placeholder = 'Filter search performance...';
+    searchConsolePanel.style.display = 'flex';
+    initSearchConsoleReplica();
   }
 }
 
@@ -899,7 +956,7 @@ function renderConnections(searchQuery = '') {
     content.innerHTML = '<div class="spinner" style="margin: 40px auto;"></div>';
     (async () => {
       try {
-        const res = await fetch('/api/maton/searchconsole/sites');
+        const res = await fetch('/api/maton/searchconsole/sites', { headers: makeHeaders() });
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.message || data.error || 'Failed to fetch Search Console sites');
@@ -950,7 +1007,7 @@ function renderConnections(searchQuery = '') {
     content.innerHTML = '<div class="spinner" style="margin: 40px auto;"></div>';
     (async () => {
       try {
-        const res = await fetch('/api/maton/analytics/accounts');
+        const res = await fetch('/api/maton/analytics/accounts', { headers: makeHeaders() });
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.message || data.error || 'Failed to fetch Analytics accounts');
@@ -1359,6 +1416,547 @@ async function fetchConnectionsSilent() {
   } catch (e) {
     console.warn('Silent connections refresh failed:', e.message);
   }
+}
+
+// Search Console Replica Logic
+
+function initSearchConsoleReplica() {
+  if (scIsInitialized) return;
+  scIsInitialized = true;
+
+  // DOM elements setup
+  const siteSelect = document.getElementById('sc-site-select');
+  const dateSelect = document.getElementById('sc-date-select');
+  const refreshBtn = document.getElementById('sc-refresh-btn');
+  const searchInput = document.getElementById('sc-table-search');
+
+  // Load properties list
+  fetchSearchConsoleSites();
+
+  // Site select handler
+  siteSelect.addEventListener('change', (e) => {
+    scCurrentSite = e.target.value;
+    if (scCurrentSite) {
+      fetchScPerformanceData();
+    } else {
+      document.getElementById('sc-dashboard-view').style.display = 'none';
+      document.getElementById('sc-empty-state').style.display = 'flex';
+      document.getElementById('sc-empty-message').textContent = 'Please select a property to view performance metrics.';
+    }
+  });
+
+  // Date select handler
+  dateSelect.addEventListener('change', () => {
+    if (scCurrentSite) {
+      fetchScPerformanceData();
+    }
+  });
+
+  // Refresh btn handler
+  refreshBtn.addEventListener('click', () => {
+    if (scCurrentSite) {
+      fetchScPerformanceData();
+    }
+  });
+
+  // Scorecards selection handlers (metrics toggling)
+  document.querySelectorAll('.sc-kpi-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const metric = card.getAttribute('data-metric');
+      if (scActiveMetrics.has(metric)) {
+        if (scActiveMetrics.size === 1) return;
+        scActiveMetrics.delete(metric);
+        card.classList.remove('active');
+      } else {
+        scActiveMetrics.add(metric);
+        card.classList.add('active');
+      }
+      updateScChartVisibility();
+    });
+  });
+
+  // Tabs navigation
+  document.querySelectorAll('.sc-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.sc-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      scActiveTab = tab.getAttribute('data-tab');
+      
+      const scSidebarMap = {
+        'queries': 'sc-performance',
+        'pages': 'sc-pages',
+        'countries': 'sc-countries',
+        'devices': 'sc-countries',
+        'dates': 'sc-performance'
+      };
+      
+      const targetSidebarFilter = scSidebarMap[scActiveTab];
+      if (targetSidebarFilter) {
+        document.querySelectorAll('#sidebar-nav-searchconsole .nav-item').forEach(nav => {
+          nav.classList.remove('active');
+          if (nav.getAttribute('data-filter') === targetSidebarFilter) {
+            nav.classList.add('active');
+            const titles = {
+              'sc-performance': 'Search Console Performance',
+              'sc-pages': 'Search Console Pages',
+              'sc-countries': 'Search Console Countries & Devices'
+            };
+            document.getElementById('searchconsole-panel-title').textContent = titles[targetSidebarFilter] || 'Search Console';
+          }
+        });
+      }
+
+      renderScTable();
+    });
+  });
+
+  // Table search handler
+  searchInput.addEventListener('input', () => {
+    renderScTable();
+  });
+}
+
+async function fetchSearchConsoleSites() {
+  const select = document.getElementById('sc-site-select');
+  select.innerHTML = '<option value="">Loading sites...</option>';
+
+  try {
+    const res = await fetch('/api/maton/searchconsole/sites', { headers: makeHeaders() });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'Failed to fetch sites');
+
+    const sites = data.siteEntry || [];
+    scSites = sites;
+
+    if (sites.length === 0) {
+      select.innerHTML = '<option value="">No verified sites found</option>';
+      document.getElementById('sc-empty-message').innerHTML = 'No verified properties found on this Search Console account.<br><br><span style="font-size: 13px; color: var(--text-secondary);">Verify properties in your Google Search Console dashboard first.</span>';
+      return;
+    }
+
+    select.innerHTML = '<option value="">Select a property...</option>';
+    sites.forEach(site => {
+      const opt = document.createElement('option');
+      opt.value = site.siteUrl;
+      opt.textContent = site.siteUrl;
+      select.appendChild(opt);
+    });
+
+    select.value = sites[0].siteUrl;
+    scCurrentSite = sites[0].siteUrl;
+    fetchScPerformanceData();
+  } catch (e) {
+    select.innerHTML = '<option value="">Error loading sites</option>';
+    document.getElementById('sc-empty-message').innerHTML = `Error: ${e.message}<br><br><span style="font-size: 13px; color: var(--text-secondary);">Make sure you have set a valid Maton API Key in the settings modal ⚙️.</span>`;
+  }
+}
+
+function getGscDateRange(rangeType) {
+  const end = new Date();
+  end.setDate(end.getDate() - 2);
+  
+  const start = new Date();
+  start.setDate(end.getDate());
+
+  switch(rangeType) {
+    case '7d':
+      start.setDate(end.getDate() - 7);
+      break;
+    case '28d':
+      start.setDate(end.getDate() - 28);
+      break;
+    case '3m':
+      start.setMonth(end.getMonth() - 3);
+      break;
+    case '6m':
+      start.setMonth(end.getMonth() - 6);
+      break;
+    case '12m':
+      start.setFullYear(end.getFullYear() - 1);
+      break;
+    default:
+      start.setDate(end.getDate() - 28);
+  }
+
+  return {
+    startDate: start.toISOString().split('T')[0],
+    endDate: end.toISOString().split('T')[0]
+  };
+}
+
+async function fetchScPerformanceData() {
+  if (!scCurrentSite) return;
+
+  const loading = document.getElementById('sc-loading-state');
+  const empty = document.getElementById('sc-empty-state');
+  const dashboard = document.getElementById('sc-dashboard-view');
+
+  loading.style.display = 'flex';
+  empty.style.display = 'none';
+  dashboard.style.display = 'none';
+
+  const range = getGscDateRange(document.getElementById('sc-date-select').value);
+
+  try {
+    const dimensionsList = ['date', 'query', 'page', 'country', 'device'];
+    const requests = dimensionsList.map(dim => {
+      return fetch('/api/maton/searchconsole/performance', {
+        method: 'POST',
+        headers: makeHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          siteUrl: scCurrentSite,
+          startDate: range.startDate,
+          endDate: range.endDate,
+          dimensions: [dim],
+          rowLimit: 250
+        })
+      }).then(async res => {
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || `Failed fetching data for ${dim}`);
+        return { dimension: dim, data: body.rows || [] };
+      });
+    });
+
+    const results = await Promise.all(requests);
+    
+    results.forEach(res => {
+      scPerformanceData[res.dimension] = res.data;
+    });
+
+    let totalClicks = 0;
+    let totalImpressions = 0;
+    let sumCtr = 0;
+    let sumPos = 0;
+    const dateRows = scPerformanceData.date;
+
+    dateRows.forEach(row => {
+      totalClicks += row.clicks || 0;
+      totalImpressions += row.impressions || 0;
+      sumCtr += row.ctr || 0;
+      sumPos += row.position || 0;
+    });
+
+    const rowCount = dateRows.length || 1;
+    const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) : 0;
+    const avgPosition = rowCount > 0 ? (sumPos / rowCount) : 0;
+
+    const formatNum = (num) => {
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+      return num.toLocaleString();
+    };
+
+    document.getElementById('kpi-clicks-val').textContent = formatNum(totalClicks);
+    document.getElementById('kpi-impressions-val').textContent = formatNum(totalImpressions);
+    document.getElementById('kpi-ctr-val').textContent = (avgCtr * 100).toFixed(1) + '%';
+    document.getElementById('kpi-position-val').textContent = avgPosition.toFixed(1);
+
+    loading.style.display = 'none';
+    dashboard.style.display = 'flex';
+
+    renderScChart();
+    renderScTable();
+
+  } catch(e) {
+    loading.style.display = 'none';
+    empty.style.display = 'flex';
+    document.getElementById('sc-empty-message').innerHTML = `Failed to retrieve Google Search Console performance data.<br><br>
+    <span style="font-size: 13px; color: #ef4444;">Error details: ${e.message}</span><br><br>
+    <span style="font-size: 13px; color: var(--text-secondary);">Ensure your Maton API Key is fully configured and the connected account has access to "${scCurrentSite}".</span>`;
+  }
+}
+
+function renderScChart() {
+  const ctx = document.getElementById('sc-chart').getContext('2d');
+  
+  if (scChartInstance) {
+    scChartInstance.destroy();
+  }
+
+  const dateRows = [...scPerformanceData.date].sort((a, b) => {
+    const d1 = a.keys && a.keys[0] ? a.keys[0] : '';
+    const d2 = b.keys && b.keys[0] ? b.keys[0] : '';
+    return d1.localeCompare(d2);
+  });
+
+  const labels = dateRows.map(row => {
+    const rawDate = row.keys && row.keys[0] ? row.keys[0] : '';
+    if (!rawDate) return '';
+    try {
+      const d = new Date(rawDate);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch(e) {
+      return rawDate;
+    }
+  });
+
+  const datasets = [];
+
+  if (scActiveMetrics.has('clicks')) {
+    datasets.push({
+      label: 'Clicks',
+      data: dateRows.map(row => row.clicks || 0),
+      borderColor: '#4285f4',
+      backgroundColor: 'rgba(66, 133, 244, 0.05)',
+      fill: true,
+      tension: 0.3,
+      yAxisID: 'y'
+    });
+  }
+
+  if (scActiveMetrics.has('impressions')) {
+    datasets.push({
+      label: 'Impressions',
+      data: dateRows.map(row => row.impressions || 0),
+      borderColor: '#a546df',
+      backgroundColor: 'rgba(165, 70, 223, 0.05)',
+      fill: true,
+      tension: 0.3,
+      yAxisID: 'y'
+    });
+  }
+
+  if (scActiveMetrics.has('ctr')) {
+    datasets.push({
+      label: 'CTR (%)',
+      data: dateRows.map(row => (row.ctr || 0) * 100),
+      borderColor: '#0f9d58',
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.3,
+      yAxisID: 'y1'
+    });
+  }
+
+  if (scActiveMetrics.has('position')) {
+    datasets.push({
+      label: 'Average Position',
+      data: dateRows.map(row => row.position || 0),
+      borderColor: '#e37400',
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.3,
+      yAxisID: 'y2'
+    });
+  }
+
+  scChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              let label = context.dataset.label || '';
+              if (label) {
+                label += ': ';
+              }
+              if (context.parsed.y !== null) {
+                if (context.dataset.label.includes('CTR')) {
+                  label += context.parsed.y.toFixed(2) + '%';
+                } else if (context.dataset.label.includes('Position')) {
+                  label += context.parsed.y.toFixed(1);
+                } else {
+                  label += context.parsed.y.toLocaleString();
+                }
+              }
+              return label;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            display: false
+          },
+          ticks: {
+            color: '#a0a5b5',
+            font: {
+              family: 'Outfit',
+              size: 11
+            }
+          }
+        },
+        y: {
+          type: 'linear',
+          display: scActiveMetrics.has('clicks') || scActiveMetrics.has('impressions'),
+          position: 'left',
+          grid: {
+            color: '#2e303f'
+          },
+          ticks: {
+            color: '#a0a5b5',
+            font: {
+              family: 'Outfit',
+              size: 11
+            }
+          }
+        },
+        y1: {
+          type: 'linear',
+          display: scActiveMetrics.has('ctr'),
+          position: 'right',
+          grid: {
+            drawOnChartArea: false
+          },
+          ticks: {
+            color: '#a0a5b5',
+            font: {
+              family: 'Outfit',
+              size: 11
+            },
+            callback: function(value) {
+              return value + '%';
+            }
+          }
+        },
+        y2: {
+          type: 'linear',
+          display: scActiveMetrics.has('position'),
+          position: 'right',
+          reverse: true,
+          grid: {
+            drawOnChartArea: false
+          },
+          ticks: {
+            color: '#a0a5b5',
+            font: {
+              family: 'Outfit',
+              size: 11
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function updateScChartVisibility() {
+  if (!scChartInstance) return;
+  renderScChart();
+}
+
+function renderScTable() {
+  const headers = document.getElementById('sc-table-headers');
+  const body = document.getElementById('sc-table-body');
+  const searchInput = document.getElementById('sc-table-search');
+
+  headers.innerHTML = '';
+  body.innerHTML = '';
+
+  const q = searchInput.value.toLowerCase().trim();
+  const rows = scPerformanceData[scActiveTab] || [];
+
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 20px;">No records available.</td></tr>';
+    return;
+  }
+
+  const tabTitles = {
+    queries: 'Query',
+    pages: 'Page',
+    countries: 'Country',
+    devices: 'Device',
+    dates: 'Date'
+  };
+  const primaryColName = tabTitles[scActiveTab] || 'Item';
+
+  headers.innerHTML = `
+    <th>Rank</th>
+    <th>${primaryColName}</th>
+    <th class="numeric">Clicks</th>
+    <th class="numeric">Impressions</th>
+    <th class="numeric">CTR</th>
+    <th class="numeric">Position</th>
+  `;
+
+  let maxClicks = 1;
+  let maxImpressions = 1;
+  rows.forEach(row => {
+    if (row.clicks > maxClicks) maxClicks = row.clicks;
+    if (row.impressions > maxImpressions) maxImpressions = row.impressions;
+  });
+
+  const filtered = rows.filter(row => {
+    const keyVal = row.keys && row.keys[0] ? row.keys[0] : '';
+    return keyVal.toLowerCase().includes(q);
+  });
+
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 20px;">No matching records found.</td></tr>';
+    return;
+  }
+
+  filtered.forEach((row, index) => {
+    let rawItem = row.keys && row.keys[0] ? row.keys[0] : '(Unknown)';
+    
+    let displayItem = rawItem;
+    if (scActiveTab === 'pages') {
+      try {
+        const u = new URL(rawItem);
+        displayItem = u.pathname + u.search + u.hash;
+      } catch(e) {}
+    } else if (scActiveTab === 'dates') {
+      try {
+        displayItem = new Date(rawItem).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      } catch(e) {}
+    } else if (scActiveTab === 'countries') {
+      displayItem = rawItem.toUpperCase();
+    } else if (scActiveTab === 'devices') {
+      displayItem = rawItem.charAt(0).toUpperCase() + rawItem.slice(1);
+    }
+
+    const clicksPct = Math.min(100, (row.clicks / maxClicks) * 100);
+    const impressionsPct = Math.min(100, (row.impressions / maxImpressions) * 100);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color: var(--text-secondary); font-family: monospace; font-size: 12px; width: 60px;">#${index + 1}</td>
+      <td title="${rawItem}" style="max-width: 320px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${displayItem}</td>
+      <td class="numeric" style="width: 140px;">
+        <div>${row.clicks.toLocaleString()}</div>
+        <div class="sc-progress-bar-container">
+          <div class="sc-progress-bar" style="width: ${clicksPct}%; background-color: var(--sc-clicks);"></div>
+        </div>
+      </td>
+      <td class="numeric" style="width: 140px;">
+        <div>${row.impressions.toLocaleString()}</div>
+        <div class="sc-progress-bar-container">
+          <div class="sc-progress-bar" style="width: ${impressionsPct}%; background-color: var(--sc-impressions);"></div>
+        </div>
+      </td>
+      <td class="numeric" style="width: 80px; font-family: monospace;">${((row.ctr || 0) * 100).toFixed(1)}%</td>
+      <td class="numeric" style="width: 80px; font-family: monospace;">${(row.position || 0).toFixed(1)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function switchScTableTab(tabName) {
+  const tabs = document.querySelectorAll('.sc-tabs .sc-tab');
+  tabs.forEach(tab => {
+    tab.classList.remove('active');
+    if (tab.getAttribute('data-tab') === tabName) {
+      tab.classList.add('active');
+    }
+  });
+  scActiveTab = tabName;
+  renderScTable();
 }
 
 
