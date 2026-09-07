@@ -6,11 +6,14 @@
   <title>Maton Workspace Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/gmail.css">
+  <link rel="stylesheet" href="/drive.css">
+  <link rel="stylesheet" href="/settings.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
+<body data-workspace="mail">
   <div class="app-container">
     <!-- Top Header -->
     <header class="app-header">
@@ -46,45 +49,6 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <button class="compose-btn" id="sidebar-action-btn">＋ Compose</button>
-        <nav class="sidebar-nav" id="sidebar-nav-mail">
-          <a href="#" class="nav-item active" data-filter="inbox">
-            <span class="icon">📥</span> Inbox <span class="badge" id="inbox-count">0</span>
-          </a>
-          <a href="#" class="nav-item" data-filter="starred">
-            <span class="icon">⭐</span> Starred
-          </a>
-          <a href="#" class="nav-item" data-filter="sent">
-            <span class="icon">📤</span> Sent
-          </a>
-          <a href="#" class="nav-item" data-filter="drafts">
-            <span class="icon">📝</span> Drafts
-          </a>
-          <a href="#" class="nav-item" data-filter="trash">
-            <span class="icon">🗑</span> Trash
-          </a>
-          <div style="border-top: 1px solid var(--border-color); margin: 8px 0; padding-top: 8px;"></div>
-          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 0 16px 8px 16px;">Labels</div>
-          <div id="sidebar-nav-mail-custom-labels" style="display: flex; flex-direction: column; gap: 8px;">
-            <!-- Dynamically populated labels -->
-          </div>
-        </nav>
-        <nav class="sidebar-nav" id="sidebar-nav-drive" style="display: none;">
-          <a href="#" class="nav-item active" data-filter="mydrive">
-            <span class="icon">💾</span> My Drive
-          </a>
-          <a href="#" class="nav-item" data-filter="shared">
-            <span class="icon">📂</span> Shared with me
-          </a>
-          <a href="#" class="nav-item" data-filter="folders">
-            <span class="icon">📁</span> Folders
-          </a>
-          <a href="#" class="nav-item" data-filter="files">
-            <span class="icon">📄</span> Files
-          </a>
-          <a href="#" class="nav-item" data-filter="trash">
-            <span class="icon">🗑</span> Trash
-          </a>
-        </nav>
         <nav class="sidebar-nav" id="sidebar-nav-connections" style="display: none;">
           <a href="#" class="nav-item active" data-filter="all-connections">
             <span class="icon">🔌</span> All Integrations
@@ -111,122 +75,12 @@
 
       <!-- Main Content Area -->
       <main class="main-content">
-        <!-- Email List View -->
-        <section class="email-list-panel" id="email-list-panel">
-          <div class="panel-header">
-            <h2 id="panel-title">Inbox</h2>
-            <div class="header-actions">
-              <select id="month-select" class="month-select">
-                <option value="">All Months</option>
-                <option value="2026-06">June 2026</option>
-                <option value="2026-05">May 2026</option>
-                <option value="2026-04">April 2026</option>
-                <option value="2026-03">March 2026</option>
-                <option value="2026-02">February 2026</option>
-                <option value="2026-01">January 2026</option>
-                <option value="2025-12">December 2025</option>
-              </select>
-              <button class="refresh-btn" id="refresh-btn">🔄 Refresh</button>
-            </div>
-          </div>
-          
-          <div class="loading-state" id="loading-state">
-            <div class="spinner"></div>
-            <p>Fetching your emails from Gmail via Maton...</p>
-          </div>
+        <!-- Gmail Workspace (src/mail.js owns everything inside) -->
+        <div id="gm-root"></div>
 
-          <div class="empty-state" id="empty-state" style="display: none;">
-            <p>No emails found from the last 3 months.</p>
-          </div>
 
-          <div class="email-list" id="email-list">
-            <!-- Emails will be dynamically populated here -->
-          </div>
-        </section>
-
-        <!-- Email Details Panel -->
-        <section class="email-detail-panel" id="email-detail-panel" style="display: none;">
-          <div class="detail-header">
-            <div class="detail-actions">
-              <button class="back-btn" id="back-btn">← Back</button>
-              <button class="delete-btn" id="delete-btn">🗑 Delete</button>
-            </div>
-            <h2 id="detail-subject">Email Subject</h2>
-          </div>
-          <div class="sender-info">
-            <div class="avatar small" id="detail-avatar">S</div>
-            <div class="sender-text">
-              <strong id="detail-from">Sender Name</strong>
-              <span id="detail-date">Date Time</span>
-            </div>
-          </div>
-          <div class="email-body" id="detail-body">
-            <!-- Full email content (HTML/Text) will be loaded here -->
-          </div>
-        </section>
-
-        <!-- Drive Details / File Preview Panel -->
-        <section class="drive-detail-panel" id="drive-detail-panel" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
-          <div class="detail-header" style="padding: 15px 30px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border-color);">
-            <div class="detail-actions" style="display: flex; justify-content: space-between; align-items: center;">
-              <button class="back-btn" id="drive-back-btn">← Back</button>
-              <div style="display: flex; gap: 8px;">
-                <button class="drive-action-btn download-btn accent" id="drive-preview-download-btn">⬇️ Download</button>
-                <button class="drive-action-btn rename-btn" id="drive-preview-rename-btn">✏️ Rename</button>
-                <button class="drive-action-btn delete-btn delete" id="drive-preview-delete-btn">🗑 Delete</button>
-              </div>
-            </div>
-            <h2 id="drive-detail-name">File Name</h2>
-          </div>
-          <div class="sender-info" style="padding: 10px 30px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-color);">
-            <div class="avatar small" id="drive-detail-avatar">📄</div>
-            <div class="sender-text">
-              <strong id="drive-detail-owner">Owner Name</strong>
-              <span id="drive-detail-date">Date Time</span>
-            </div>
-          </div>
-          <div class="email-body" id="drive-detail-body" style="flex: 1; display: flex; justify-content: center; align-items: center; background-color: var(--bg-secondary); padding: 20px; position: relative;">
-            <!-- File viewer (iframe / img / video / audio) will go here -->
-          </div>
-        </section>
-        <!-- Drive Explorer View -->
-        <section class="drive-list-panel" id="drive-list-panel" style="display: none;">
-          <div class="panel-header">
-            <h2 id="drive-panel-title">Shared with me</h2>
-            <div class="header-actions">
-              <button class="refresh-btn" id="drive-sync-btn" style="background-color: var(--accent-color); color: white; border-color: var(--accent-color);">⚡ Sync from Drive</button>
-              <button class="refresh-btn" id="drive-refresh-btn">🔄 Refresh</button>
-            </div>
-          </div>
-          
-          <div class="drive-breadcrumbs" id="drive-breadcrumbs"></div>
-          
-          <div class="drive-folders-section" id="drive-folders-section">
-            <h3>Folders</h3>
-            <div class="folders-grid" id="folders-grid">
-              <!-- Dynamically populated folders -->
-            </div>
-          </div>
-
-          <div class="drive-files-section" id="drive-files-section-container">
-            <h3>Files</h3>
-            <div class="drive-files-table-container">
-              <table class="drive-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Owner</th>
-                    <th>Date Shared</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="drive-files-list">
-                  <!-- Dynamically populated files -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+        <!-- Drive Workspace (src/drive/drive.js owns everything inside) -->
+        <div id="dr-root"></div>
 
         <!-- Connections Explorer View -->
         <section class="connections-list-panel" id="connections-list-panel" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
@@ -332,31 +186,10 @@
     </div>
   </div>
 
-    <!-- Settings Modal -->
-    <div class="modal-overlay" id="settings-modal" style="display: none;">
-      <div class="settings-modal-content">
-        <div class="modal-header">
-          <h3>Maton API Key Settings</h3>
-          <button class="close-modal-btn" id="close-settings-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p class="modal-desc">Enter your Maton API Key to authorize connections and fetch workspace data.</p>
-          <div class="form-group">
-            <label for="apikey-input">Maton API Key</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="password" id="apikey-input" placeholder="Enter MATON_API_KEY...">
-              <button class="refresh-btn" id="toggle-apikey-visibility-btn">👁️</button>
-            </div>
-            <span class="status-indicator" id="apikey-status-text">Status: Checking...</span>
-          </div>
-          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-            <button class="refresh-btn" id="cancel-settings-btn">Cancel</button>
-            <button class="compose-btn" id="save-apikey-btn" style="padding: 10px 20px;">Save Changes</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- API key settings dialog (src/settings.js renders the contents) -->
+    <div class="ms-modal-host" id="settings-modal" hidden></div>
 
     <script src="/app.js"></script>
+    <script type="module" src="/src/boot.js"></script>
   </body>
 </html>
