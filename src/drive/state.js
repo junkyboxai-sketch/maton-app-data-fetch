@@ -42,6 +42,9 @@ export const driveState = {
   // Account
   about: null,
 
+  // Active folder download: { status, phase, label, done, total, bytes, name }
+  transfer: null,
+
   // Drag state for move-by-drop
   dragIds: []
 };

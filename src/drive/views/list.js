@@ -70,6 +70,7 @@ function toolbar() {
   if (count) {
     const inTrash = driveState.view === 'trash';
     const anyStarred = driveState.files.some(f => driveState.selected.has(f.id) && f.starred);
+    const anySelectedFolder = driveState.files.some(f => driveState.selected.has(f.id) && f.isFolder);
     return `
       <div class="dr-toolbar is-selection">
         <button class="dr-icon-btn" data-action="clear-selection" title="Clear selection">
@@ -81,6 +82,10 @@ function toolbar() {
           <button class="dr-icon-btn" data-action="bulk-restore" title="Restore">${icon('restore', { size: 20 })}</button>
           <button class="dr-icon-btn" data-action="bulk-delete" title="Delete forever">${icon('delete', { size: 20 })}</button>
         ` : `
+          <button class="dr-icon-btn" data-action="bulk-download"
+                  title="Download${count > 1 || anySelectedFolder ? ' as ZIP' : ''}">
+            ${icon('download', { size: 20 })}
+          </button>
           <button class="dr-icon-btn" data-action="bulk-star" title="${anyStarred ? 'Remove star' : 'Add star'}">
             ${icon(anyStarred ? 'star' : 'starOutline', { size: 20 })}
           </button>
@@ -195,7 +200,8 @@ export function contextMenuMarkup(file) {
   return item('open', file.isFolder ? 'folder' : 'openInFull', 'Open')
     + (file.isFolder ? '' : item('preview', 'visibility', 'Preview'))
     + (canShare ? item('share', 'personAdd', 'Share') : '')
-    + (file.isFolder ? '' : item('download', 'download', 'Download'))
+    // Folders download as a ZIP built in the browser.
+    + item('download', 'download', file.isFolder ? 'Download as ZIP' : 'Download')
     + '<div class="dr-menu-sep"></div>'
     + item('rename', 'edit', 'Rename')
     + (file.isFolder ? '' : item('copy', 'contentCopy', 'Make a copy'))

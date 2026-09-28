@@ -1,7 +1,7 @@
 // Entry point for the Drive workspace: shell, data loading, and every
 // interaction routed to the right view module.
 
-import { driveApi, contentUrl } from './api.js';
+import { driveApi } from './api.js';
 import {
   driveState, setDriveState, subscribeDrive,
   selectOnly, toggleSelected, selectRange, selectAll, clearSelection,
@@ -19,6 +19,8 @@ import {
 import { mountSheetsEditor, sheetsHasUnsavedChanges } from './views/sheets.js';
 import { mountDocsEditor, docsHasUnsavedChanges } from './views/docs.js';
 import * as actions from './actions.js';
+import { renderTransfer } from './views/transfer.js';
+import { downloadFiles, cancelDownload } from './download.js';
 
 let els = {};
 let started = false;
@@ -38,7 +40,8 @@ function buildShell(root) {
     <aside class="dr-details" id="dr-details" hidden></aside>
     <div class="dr-viewer" id="dr-viewer" hidden></div>
     <div class="dr-modal-host" id="dr-share" hidden></div>
-    <div class="dr-context" id="dr-context" hidden></div>`;
+    <div class="dr-context" id="dr-context" hidden></div>
+    <div class="dr-transfer-host" id="dr-transfer" hidden></div>`;
 
   els = {
     root,
@@ -49,6 +52,7 @@ function buildShell(root) {
     viewer: root.querySelector('#dr-viewer'),
     share: root.querySelector('#dr-share'),
     context: root.querySelector('#dr-context'),
+    transfer: root.querySelector('#dr-transfer'),
     search: document.getElementById('search-input')
   };
 }
@@ -211,7 +215,7 @@ async function runMenuAction(action, file) {
     case 'open': return openFile(file);
     case 'preview': return previewFile(file);
     case 'share': return openShare(file);
-    case 'download': window.open(contentUrl(file, false), '_blank'); return;
+    case 'download': return downloadFiles([file]);
     case 'rename': return actions.rename(file);
     case 'copy': return actions.copy(file);
     case 'star': return actions.setStarred([file.id], !file.starred);
@@ -249,6 +253,7 @@ const LIST_KEYS = ['files', 'loading', 'error', 'selected', 'view', 'search',
   'sort', 'layout', 'breadcrumbs', 'nextPageToken', 'detailsOpen'];
 const DETAILS_KEYS = ['detailsFor', 'detailsOpen', 'files'];
 const SHARE_KEYS = ['shareFile', 'sharePermissions', 'shareLoading'];
+const TRANSFER_KEYS = ['transfer'];
 const VIEWER_KEYS = ['openFile', 'openMode', 'editor', 'openError'];
 
 function render() {
@@ -256,6 +261,7 @@ function render() {
   renderDriveList({ toolbarEl: els.toolbar, listEl: els.list });
   renderDetails(els.details);
   renderShare(els.share);
+  renderTransfer(els.transfer);
 }
 
 let pendingKeys = new Set();
@@ -275,6 +281,7 @@ function queueRender(changed) {
     if (keys.some(k => LIST_KEYS.includes(k))) renderDriveList({ toolbarEl: els.toolbar, listEl: els.list });
     if (keys.some(k => DETAILS_KEYS.includes(k))) renderDetails(els.details);
     if (keys.some(k => SHARE_KEYS.includes(k))) renderShare(els.share);
+    if (keys.some(k => TRANSFER_KEYS.includes(k))) renderTransfer(els.transfer);
     // The viewer repaints itself on open; only a star toggle needs a refresh.
     if (keys.some(k => VIEWER_KEYS.includes(k)) && driveState.openFile
       && driveState.openMode === 'viewer' && keys.includes('files')) {
@@ -426,6 +433,7 @@ function bindToolbar() {
         actions.setStarred(ids, !anyStarred);
         break;
       }
+      case 'bulk-download': downloadFiles(files); break;
       case 'bulk-trash': actions.trash(ids, files.map(f => f.name)); break;
       case 'bulk-restore': actions.restore(ids); break;
       case 'bulk-delete': actions.deleteForever(ids); break;
@@ -465,6 +473,7 @@ function bindDetails() {
       case 'close-details': setDriveState({ detailsOpen: false }); break;
       case 'open-file': if (file) openFile(file); break;
       case 'preview-file': if (file) previewFile(file); break;
+      case 'download-file': if (file) downloadFiles([file]); break;
       case 'share-file': if (file) openShare(file); break;
       default: break;
     }
@@ -539,6 +548,12 @@ function bindShare() {
     const select = event.target.closest('[data-permission-id]');
     if (!select || !driveState.shareFile) return;
     await changeRole(driveState.shareFile, select.dataset.permissionId, select.value);
+  });
+}
+
+function bindTransfer() {
+  els.transfer.addEventListener('click', event => {
+    if (event.target.closest('[data-action="cancel-download"]')) cancelDownload();
   });
 }
 
@@ -668,6 +683,7 @@ export function initDrive(root) {
   bindViewer();
   bindShare();
   bindContext();
+  bindTransfer();
   bindSearch();
   bindShortcuts();
 

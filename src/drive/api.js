@@ -59,6 +59,9 @@ export const driveApi = {
 
   path: id => request(`/api/drive/files/${encodeURIComponent(id)}/path`),
 
+  /** Flatten a folder into ZIP-ready entries, each with its archive path. */
+  tree: id => request(`/api/drive/files/${encodeURIComponent(id)}/tree`),
+
   createFolder: (name, parentId) => send('/api/drive/folders', { name, parentId }),
 
   update: (id, patch) => send(`/api/drive/files/${encodeURIComponent(id)}`, patch, 'PATCH'),

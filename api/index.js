@@ -573,6 +573,130 @@ route('GET', '/api/drive/files/:id/path', async ctx => {
   return ctx.json(200, { path: trail });
 });
 
+/**
+ * Flatten a folder into everything the client needs to build a ZIP:
+ * one entry per descendant, each with its archive-relative path.
+ *
+ * Breadth-first with bounded concurrency so a wide tree costs one request
+ * from the browser instead of one per level. Shortcuts are skipped, since
+ * following them can leave the subtree or form a cycle.
+ */
+route('GET', '/api/drive/files/:id/tree', async ctx => {
+  const rootRes = await makeMatonRequest(
+    ctx.apiKey,
+    `${D}/files/${encodeURIComponent(ctx.params.id)}?fields=id,name,mimeType,size&supportsAllDrives=true`
+  );
+  if (rootRes.status !== 200) return ctx.json(rootRes.status, rootRes.body);
+
+  const root = rootRes.body;
+  const rootName = drive.sanitizeSegment(root.name);
+
+  // A single file needs no walk.
+  if (root.mimeType !== drive.FOLDER_MIME) {
+    return ctx.json(200, {
+      root: { id: root.id, name: rootName, isFolder: false },
+      entries: [{
+        id: root.id,
+        path: drive.archiveName(root.name, root.mimeType),
+        mimeType: root.mimeType,
+        size: Number(root.size || 0),
+        isFolder: false,
+        isGoogleNative: drive.isGoogleNative(root.mimeType)
+      }],
+      folderCount: 0,
+      fileCount: 1,
+      totalBytes: Number(root.size || 0),
+      truncated: false
+    });
+  }
+
+  const entries = [];
+  const visited = new Set([root.id]);
+  let queue = [{ id: root.id, path: rootName, depth: 0 }];
+  let folderCount = 0;
+  let fileCount = 0;
+  let totalBytes = 0;
+  let truncated = false;
+
+  const fields = encodeURIComponent('nextPageToken,files(id,name,mimeType,size)');
+
+  while (queue.length && !truncated) {
+    const level = queue;
+    queue = [];
+
+    const results = await gmail.mapLimit(level, 8, async folder => {
+      const children = [];
+      let pageToken = '';
+
+      do {
+        let url = `${D}/files?q=${encodeURIComponent(`'${drive.escapeQueryValue(folder.id)}' in parents and trashed = false`)}`
+          + `&pageSize=1000&fields=${fields}&orderBy=folder,name`
+          + '&supportsAllDrives=true&includeItemsFromAllDrives=true';
+        if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+        const res = await makeMatonRequest(ctx.apiKey, url);
+        if (res.status !== 200) break;
+
+        children.push(...(res.body.files || []));
+        pageToken = res.body.nextPageToken || '';
+      } while (pageToken);
+
+      return { folder, children };
+    });
+
+    for (const { folder, children } of results) {
+      // Sibling names must be unique per directory, not globally.
+      const taken = new Set();
+
+      for (const child of children) {
+        if (child.mimeType === drive.SHORTCUT_MIME) continue;
+        if (entries.length >= drive.MAX_TREE_ENTRIES) { truncated = true; break; }
+
+        const isFolder = child.mimeType === drive.FOLDER_MIME;
+        const name = isFolder
+          ? drive.uniqueName(drive.sanitizeSegment(child.name), taken)
+          : drive.uniqueName(drive.archiveName(child.name, child.mimeType), taken);
+        const path = `${folder.path}/${name}`;
+
+        if (isFolder) {
+          folderCount++;
+          entries.push({ id: child.id, path, mimeType: child.mimeType, size: 0, isFolder: true });
+
+          if (folder.depth + 1 < drive.MAX_TREE_DEPTH && !visited.has(child.id)) {
+            visited.add(child.id);
+            queue.push({ id: child.id, path, depth: folder.depth + 1 });
+          }
+        } else {
+          const size = Number(child.size || 0);
+          fileCount++;
+          totalBytes += size;
+          entries.push({
+            id: child.id,
+            path,
+            mimeType: child.mimeType,
+            size,
+            isFolder: false,
+            // Native types have no size until exported, so the client cannot
+            // rely on totalBytes being complete.
+            isGoogleNative: drive.isGoogleNative(child.mimeType)
+          });
+        }
+      }
+      if (truncated) break;
+    }
+  }
+
+  return ctx.json(200, {
+    root: { id: root.id, name: rootName, isFolder: true },
+    entries,
+    folderCount,
+    fileCount,
+    totalBytes,
+    truncated,
+    limit: drive.MAX_TREE_ENTRIES
+  });
+});
+
 route('POST', '/api/drive/folders', async ctx => {
   const body = await readBody(ctx.req);
   if (!body.name || !body.name.trim()) return ctx.json(400, { error: 'name is required' });
