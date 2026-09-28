@@ -10,6 +10,9 @@ export const driveState = {
   breadcrumbs: [],        // [{ id, name, isRoot }]
   search: '',
 
+  // Back/forward trail, owned by ./history.js: { entries, index }
+  history: { entries: [], index: -1 },
+
   // Listing
   files: [],
   loading: false,
@@ -41,6 +44,9 @@ export const driveState = {
 
   // Account
   about: null,
+
+  // Active folder download: { status, phase, label, done, total, bytes, name }
+  transfer: null,
 
   // Drag state for move-by-drop
   dragIds: []

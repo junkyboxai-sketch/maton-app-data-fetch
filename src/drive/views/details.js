@@ -84,6 +84,9 @@ export function renderDetails(container) {
         <button class="dr-btn" data-action="preview-file">
           ${icon('visibility', { size: 18 })}<span>Preview</span>
         </button>`}
+      <button class="dr-btn" data-action="download-file">
+        ${icon('download', { size: 18 })}<span>Download${file.isFolder ? ' as ZIP' : ''}</span>
+      </button>
       ${file.capabilities.canShare !== false ? `
         <button class="dr-btn" data-action="share-file">
           ${icon('personAdd', { size: 18 })}<span>Share</span>

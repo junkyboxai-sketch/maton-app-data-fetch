@@ -4,6 +4,7 @@ import { icon } from '../../icons.js';
 import { esc } from '../../util.js';
 import { driveState, isSelected } from '../state.js';
 import { fileType, formatFileSize, formatDriveDate } from '../util.js';
+import { canGoBack, canGoForward, peek } from '../history.js';
 
 const VIEW_TITLES = {
   mydrive: 'My Drive',
@@ -32,6 +33,40 @@ const EMPTY_COPY = {
   trash: ['Trash is empty', 'Items you delete land here first.'],
   folder: ['This folder is empty', 'Nothing has been added to it yet.']
 };
+
+// --- History navigation -----------------------------------------------------
+
+/** A human label for a visited location, used on the back/forward tooltips. */
+export function describeLocation(location) {
+  if (!location) return '';
+  if (location.search) return `Search: ${location.search}`;
+  if (location.view === 'folder') {
+    const trail = location.breadcrumbs || [];
+    return trail.length ? trail[trail.length - 1].name : 'Folder';
+  }
+  return VIEW_TITLES[location.view] || 'My Drive';
+}
+
+function historyNav() {
+  const back = canGoBack(driveState.history) ? peek(driveState.history, -1) : null;
+  const forward = canGoForward(driveState.history) ? peek(driveState.history, 1) : null;
+
+  const title = (prefix, location) => location
+    ? `${prefix} to ${describeLocation(location)}`
+    : `No ${prefix.toLowerCase()} history`;
+
+  return `
+    <div class="dr-history">
+      <button class="dr-icon-btn" data-action="history-back" ${back ? '' : 'disabled'}
+              title="${esc(title('Back', back))} (Alt+Left)" aria-label="Back">
+        ${icon('arrowBack', { size: 20 })}
+      </button>
+      <button class="dr-icon-btn" data-action="history-forward" ${forward ? '' : 'disabled'}
+              title="${esc(title('Forward', forward))} (Alt+Right)" aria-label="Forward">
+        ${icon('arrowForward', { size: 20 })}
+      </button>
+    </div>`;
+}
 
 // --- Breadcrumbs ------------------------------------------------------------
 
@@ -70,6 +105,7 @@ function toolbar() {
   if (count) {
     const inTrash = driveState.view === 'trash';
     const anyStarred = driveState.files.some(f => driveState.selected.has(f.id) && f.starred);
+    const anySelectedFolder = driveState.files.some(f => driveState.selected.has(f.id) && f.isFolder);
     return `
       <div class="dr-toolbar is-selection">
         <button class="dr-icon-btn" data-action="clear-selection" title="Clear selection">
@@ -81,6 +117,10 @@ function toolbar() {
           <button class="dr-icon-btn" data-action="bulk-restore" title="Restore">${icon('restore', { size: 20 })}</button>
           <button class="dr-icon-btn" data-action="bulk-delete" title="Delete forever">${icon('delete', { size: 20 })}</button>
         ` : `
+          <button class="dr-icon-btn" data-action="bulk-download"
+                  title="Download${count > 1 || anySelectedFolder ? ' as ZIP' : ''}">
+            ${icon('download', { size: 20 })}
+          </button>
           <button class="dr-icon-btn" data-action="bulk-star" title="${anyStarred ? 'Remove star' : 'Add star'}">
             ${icon(anyStarred ? 'star' : 'starOutline', { size: 20 })}
           </button>
@@ -92,6 +132,7 @@ function toolbar() {
   const sortLabel = (SORT_OPTIONS.find(s => s.id === driveState.sort) || SORT_OPTIONS[0]).label;
   return `
     <div class="dr-toolbar">
+      ${historyNav()}
       ${breadcrumbs()}
       <span class="dr-toolbar-gap"></span>
       <div class="dr-sort">
@@ -195,7 +236,8 @@ export function contextMenuMarkup(file) {
   return item('open', file.isFolder ? 'folder' : 'openInFull', 'Open')
     + (file.isFolder ? '' : item('preview', 'visibility', 'Preview'))
     + (canShare ? item('share', 'personAdd', 'Share') : '')
-    + (file.isFolder ? '' : item('download', 'download', 'Download'))
+    // Folders download as a ZIP built in the browser.
+    + item('download', 'download', file.isFolder ? 'Download as ZIP' : 'Download')
     + '<div class="dr-menu-sep"></div>'
     + item('rename', 'edit', 'Rename')
     + (file.isFolder ? '' : item('copy', 'contentCopy', 'Make a copy'))
