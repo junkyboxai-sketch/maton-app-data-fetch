@@ -318,6 +318,8 @@ body[data-workspace="drive"] #dr-root { display: flex; }
 .dr-toolbar-gap { flex: 1; }
 .dr-selection-count { font-size: 14px; color: var(--dr-text); font-weight: 500; }
 
+.dr-history { display: flex; align-items: center; gap: 0; flex-shrink: 0; margin-right: 4px; }
+
 .dr-crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .dr-crumb {
   font-size: 22px;

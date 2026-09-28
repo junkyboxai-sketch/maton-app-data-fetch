@@ -4,6 +4,7 @@ import { icon } from '../../icons.js';
 import { esc } from '../../util.js';
 import { driveState, isSelected } from '../state.js';
 import { fileType, formatFileSize, formatDriveDate } from '../util.js';
+import { canGoBack, canGoForward, peek } from '../history.js';
 
 const VIEW_TITLES = {
   mydrive: 'My Drive',
@@ -32,6 +33,40 @@ const EMPTY_COPY = {
   trash: ['Trash is empty', 'Items you delete land here first.'],
   folder: ['This folder is empty', 'Nothing has been added to it yet.']
 };
+
+// --- History navigation -----------------------------------------------------
+
+/** A human label for a visited location, used on the back/forward tooltips. */
+export function describeLocation(location) {
+  if (!location) return '';
+  if (location.search) return `Search: ${location.search}`;
+  if (location.view === 'folder') {
+    const trail = location.breadcrumbs || [];
+    return trail.length ? trail[trail.length - 1].name : 'Folder';
+  }
+  return VIEW_TITLES[location.view] || 'My Drive';
+}
+
+function historyNav() {
+  const back = canGoBack(driveState.history) ? peek(driveState.history, -1) : null;
+  const forward = canGoForward(driveState.history) ? peek(driveState.history, 1) : null;
+
+  const title = (prefix, location) => location
+    ? `${prefix} to ${describeLocation(location)}`
+    : `No ${prefix.toLowerCase()} history`;
+
+  return `
+    <div class="dr-history">
+      <button class="dr-icon-btn" data-action="history-back" ${back ? '' : 'disabled'}
+              title="${esc(title('Back', back))} (Alt+Left)" aria-label="Back">
+        ${icon('arrowBack', { size: 20 })}
+      </button>
+      <button class="dr-icon-btn" data-action="history-forward" ${forward ? '' : 'disabled'}
+              title="${esc(title('Forward', forward))} (Alt+Right)" aria-label="Forward">
+        ${icon('arrowForward', { size: 20 })}
+      </button>
+    </div>`;
+}
 
 // --- Breadcrumbs ------------------------------------------------------------
 
@@ -97,6 +132,7 @@ function toolbar() {
   const sortLabel = (SORT_OPTIONS.find(s => s.id === driveState.sort) || SORT_OPTIONS[0]).label;
   return `
     <div class="dr-toolbar">
+      ${historyNav()}
       ${breadcrumbs()}
       <span class="dr-toolbar-gap"></span>
       <div class="dr-sort">

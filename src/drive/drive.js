@@ -9,6 +9,7 @@ import {
 } from './state.js';
 import { esc } from '../util.js';
 import { nativeEditor } from './util.js';
+import * as history from './history.js';
 import { renderDriveSidebar, bindDriveSidebar } from './views/sidebar.js';
 import { renderDriveList, contextMenuMarkup } from './views/list.js';
 import { renderDetails } from './views/details.js';
@@ -106,7 +107,11 @@ async function loadFiles({ refresh = false, append = false, silent = false } = {
 // Navigation
 // ---------------------------------------------------------------------------
 
-function navigate({ view, folderId = '', search = '' }) {
+/**
+ * Apply a location. `record` is false when the move came from the trail
+ * itself, so stepping back does not append a new entry.
+ */
+function applyLocation({ view, folderId = '', search = '', breadcrumbs = null }, { record = true } = {}) {
   clearSelection();
   setDriveState({
     view,
@@ -114,19 +119,47 @@ function navigate({ view, folderId = '', search = '' }) {
     search,
     nextPageToken: null,
     detailsFor: null,
-    breadcrumbs: view === 'folder' ? driveState.breadcrumbs : []
+    breadcrumbs: view === 'folder' ? (breadcrumbs || []) : []
   });
+
+  if (record) setDriveState({ history: history.push(driveState.history, { view, folderId, search }) });
 
   if (els.search) els.search.value = search;
   els.list.scrollTop = 0;
 
-  if (view === 'folder') loadBreadcrumbs(folderId);
+  // Only walk the ancestry when the trail did not already carry it.
+  if (view === 'folder' && !breadcrumbs) {
+    const index = driveState.history.index;
+    loadBreadcrumbs(folderId).then(() => {
+      setDriveState({ history: history.remember(driveState.history, index, driveState.breadcrumbs) });
+    });
+  }
+
   render();
   loadFiles();
 }
 
+function navigate(location) {
+  applyLocation(location, { record: true });
+}
+
 function openFolder(file) {
   navigate({ view: 'folder', folderId: file.id });
+}
+
+function stepHistory(delta) {
+  const next = history.step(driveState.history, delta);
+  if (!next) return;
+  setDriveState({ history: next.history });
+  applyLocation(next.location, { record: false });
+}
+
+function goBack() {
+  stepHistory(-1);
+}
+
+function goForward() {
+  stepHistory(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +283,8 @@ function closeShare() {
 
 const SIDEBAR_KEYS = ['view', 'search', 'about'];
 const LIST_KEYS = ['files', 'loading', 'error', 'selected', 'view', 'search',
-  'sort', 'layout', 'breadcrumbs', 'nextPageToken', 'detailsOpen'];
+  'sort', 'layout', 'breadcrumbs', 'nextPageToken', 'detailsOpen',
+  'history'];
 const DETAILS_KEYS = ['detailsFor', 'detailsOpen', 'files'];
 const SHARE_KEYS = ['shareFile', 'sharePermissions', 'shareLoading'];
 const TRANSFER_KEYS = ['transfer'];
@@ -411,6 +445,8 @@ function bindToolbar() {
     const files = selectedFiles();
 
     switch (trigger.dataset.action) {
+      case 'history-back': goBack(); break;
+      case 'history-forward': goForward(); break;
       case 'toggle-sort': {
         const menu = els.toolbar.querySelector('[data-menu="sort"]');
         if (menu) menu.hidden = !menu.hidden;
@@ -614,6 +650,9 @@ function bindShortcuts() {
       return;
     }
 
+    if (event.altKey && event.key === 'ArrowLeft') { event.preventDefault(); return goBack(); }
+    if (event.altKey && event.key === 'ArrowRight') { event.preventDefault(); return goForward(); }
+
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault();
       return selectAll();
@@ -695,7 +734,8 @@ export function initDrive(root) {
     closeViewerSilently();
     setDriveState({
       about: null, files: [], breadcrumbs: [], view: 'mydrive', folderId: '',
-      search: '', nextPageToken: null, detailsFor: null, shareFile: null, error: null
+      search: '', nextPageToken: null, detailsFor: null, shareFile: null, error: null,
+      history: history.createHistory()
     });
     clearSelection();
     if (!active) return;
@@ -710,6 +750,13 @@ export async function activateDrive() {
   if (els.search) {
     els.search.placeholder = 'Search in Drive';
     els.search.value = driveState.search;
+  }
+  if (driveState.history.index === -1) {
+    setDriveState({
+      history: history.push(driveState.history, {
+        view: driveState.view, folderId: driveState.folderId, search: driveState.search
+      })
+    });
   }
   render();
   if (!driveState.about) await loadAbout();

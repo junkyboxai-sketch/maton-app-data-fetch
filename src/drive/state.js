@@ -10,6 +10,9 @@ export const driveState = {
   breadcrumbs: [],        // [{ id, name, isRoot }]
   search: '',
 
+  // Back/forward trail, owned by ./history.js: { entries, index }
+  history: { entries: [], index: -1 },
+
   // Listing
   files: [],
   loading: false,
